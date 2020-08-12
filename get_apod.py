@@ -1,23 +1,25 @@
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
+import urllib.error
 import os
 import time
-import multiprocessing as mp
 import requests
 import datetime
-year=16
+
+YEAR=19
+#generate a date range in format "200812"
 def date_range(start, end, step=1, format="%y%m%d"):
     strptime, strftime = datetime.datetime.strptime, datetime.datetime.strftime
     days = (strptime(end, format) - strptime(start, format)).days
     return [strftime(strptime(start, format) + datetime.timedelta(i), format) for i in range(0, days, step)]
 
-os.makedirs('./img/{}/'.format(year), exist_ok=True)
-os.makedirs('./explaination/{}/'.format(year), exist_ok=True)
+os.makedirs('./img/{}/'.format(YEAR), exist_ok=True)
+os.makedirs('./description/{}/'.format(YEAR), exist_ok=True)
+
 def crawl(date):
-    print('Begin opening {}'.format(date))
+    print('Opening {}'.format(date))
     url = 'https://apod.nasa.gov/apod/ap{}.html'.format(date)
     response = urlopen(url)
-    #time.sleep(0.1)
     html = response.read()
     soup = BeautifulSoup(html, features='lxml')
     #get_title
@@ -27,31 +29,34 @@ def crawl(date):
     try:
         image_url = "https://apod.nasa.gov/apod/" + centers[0].find_all('p')[1].a.get('href')
         print(image_url)
-        image_type = image_url[-3:]
-    except AttributeError:
-        image_type = 'nnnnnn'
+        image_type = image_url.split('.')[-1]
+    except AttributeError: #No image in this page
+        image_type = 'none'
+    except urllib.error.HTTPError: #This page may not exist
+        print("HTTPError for {}".format(date))
+        return
     #get_content
-    with open('./explaination/{}/{}.txt'.format(year, date),'w' ,encoding='utf-8') as f:
+    with open('./description/{}/{}.txt'.format(YEAR, date),'w' ,encoding='utf-8') as f:
         f.write('{}\nTitle:{}\n'.format(date, title))
         for text in [p.get_text() for p in soup.find_all('p')]:
             if 'Explanation:' in text:
                 f.write(text.replace('\n', ' ').strip())
     #make_list
-    with open('./list{}.txt'.format(year),'a',encoding='utf-8') as f:
+    with open('./list{}.txt'.format(YEAR),'a',encoding='utf-8') as f:
         f.write("{}\t{}\n".format(date, title))
     #get_image
-    print('Begin getting images of {}'.format(date))
-    if image_type in ['jpg', 'png', 'gif', 'bmp']:
-        r = requests.get(image_url, stream=True)    # stream loading
-        with open('./img/{}/{} {}.{}'.format(year, date, (
-            title.split('-'))[1].replace(':','-').replace('/',' ').strip(), image_type), 'wb') as f:
+    print('Getting images of {}'.format(date))
+    if image_type != 'none':
+        r = requests.get(image_url, stream=True)    #download the picture
+        with open('./img/{}/{} {}.{}'.format(YEAR, date, 
+        (title.split('-'))[1].replace(':','-').replace('/',' ').strip(), image_type), 'wb') as f:
             for chunk in r.iter_content(chunk_size=32):
                 f.write(chunk)
     else:
         print("No image of {}".format(date))
-    print('Done - {}'.format(date))
+    print('Done - {} !'.format(date))
 
-for date in date_range('{}0101'.format(year),'{}0101'.format(year+1)):
+for date in date_range('{}0101'.format(YEAR),'{}0101'.format(YEAR+1)):
     crawl(date)
 
 print('Done!')
